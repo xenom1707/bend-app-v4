@@ -1,0 +1,312 @@
+name: Build Android V4 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/java/com/shivanov/bendcalculator
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
+          cp index.html app/src/main/assets/index.html
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "BendCalculator"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+          }
+
+          android {
+              namespace = "com.shivanov.bendcalculator"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.shivanov.bendcalculator"
+                  minSdk = 23
+                  targetSdk = 35
+                  versionCode = 4
+                  versionName = "4.0"
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="true"
+                  android:label="Bend Calculator"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowLightStatusBar">true</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/shivanov/bendcalculator/MainActivity.java <<'EOF'
+          package com.shivanov.bendcalculator;
+
+          import android.app.Activity;
+          import android.app.PrintManager;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.print.PrintDocumentAdapter;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Toast;
+
+          import java.io.BufferedReader;
+          import java.io.InputStream;
+          import java.io.InputStreamReader;
+          import java.io.OutputStream;
+          import java.nio.charset.StandardCharsets;
+
+          public class MainActivity extends Activity {
+              private static final int CREATE_FILE = 1001;
+              private static final int OPEN_JSON = 1002;
+
+              private WebView webView;
+              private String pendingText = "";
+              private String pendingMime = "text/plain";
+              private String pendingName = "file.txt";
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  webView = new WebView(this);
+                  setContentView(webView);
+
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(true);
+
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.setWebChromeClient(new WebChromeClient());
+                  webView.addJavascriptInterface(new AndroidBridge(), "Android");
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              public class AndroidBridge {
+                  @JavascriptInterface
+                  public void printPage() {
+                      runOnUiThread(() -> {
+                          PrintManager printManager =
+                                  (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                          PrintDocumentAdapter adapter =
+                                  webView.createPrintDocumentAdapter("Bend Calculator Database");
+                          printManager.print("Bend Calculator Database", adapter, null);
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void saveTextFile(String fileName, String mimeType, String content) {
+                      pendingName = fileName;
+                      pendingMime = mimeType;
+                      pendingText = content;
+
+                      runOnUiThread(() -> {
+                          Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                          intent.addCategory(Intent.CATEGORY_OPENABLE);
+                          intent.setType(mimeType);
+                          intent.putExtra(Intent.EXTRA_TITLE, fileName);
+                          startActivityForResult(intent, CREATE_FILE);
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void openJsonFile() {
+                      runOnUiThread(() -> {
+                          Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                          intent.addCategory(Intent.CATEGORY_OPENABLE);
+                          intent.setType("application/json");
+                          startActivityForResult(intent, OPEN_JSON);
+                      });
+                  }
+              }
+
+              @Override
+              protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+                  super.onActivityResult(requestCode, resultCode, data);
+
+                  if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+                      return;
+                  }
+
+                  Uri uri = data.getData();
+
+                  if (requestCode == CREATE_FILE) {
+                      try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                          if (out != null) {
+                              out.write(pendingText.getBytes(StandardCharsets.UTF_8));
+                              out.flush();
+                              Toast.makeText(this, "הקובץ נשמר בהצלחה", Toast.LENGTH_SHORT).show();
+                          }
+                      } catch (Exception e) {
+                          Toast.makeText(this, "שגיאה בשמירת הקובץ", Toast.LENGTH_LONG).show();
+                      }
+                  }
+
+                  if (requestCode == OPEN_JSON) {
+                      try {
+                          InputStream in = getContentResolver().openInputStream(uri);
+                          BufferedReader reader = new BufferedReader(
+                                  new InputStreamReader(in, StandardCharsets.UTF_8)
+                          );
+
+                          StringBuilder sb = new StringBuilder();
+                          String line;
+                          while ((line = reader.readLine()) != null) {
+                              sb.append(line).append("\n");
+                          }
+                          reader.close();
+
+                          String json = sb.toString();
+                          String encoded = android.util.Base64.encodeToString(
+                                  json.getBytes(StandardCharsets.UTF_8),
+                                  android.util.Base64.NO_WRAP
+                          );
+
+                          webView.evaluateJavascript(
+                                  "importBackupText(decodeURIComponent(escape(atob('" + encoded + "'))));",
+                                  null
+                          );
+                      } catch (Exception e) {
+                          Toast.makeText(this, "שגיאה בקריאת קובץ הגיבוי", Toast.LENGTH_LONG).show();
+                      }
+                  }
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1 || true)"
+
+          if [ -z "$SDKMANAGER" ]; then
+            mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
+            curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/tools.zip
+            rm -rf /tmp/android-tools
+            mkdir -p /tmp/android-tools
+            unzip -q /tmp/tools.zip -d /tmp/android-tools
+            cp -R /tmp/android-tools/cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BendCalculator-V4-Android
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

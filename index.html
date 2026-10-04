@@ -1,0 +1,213 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bend Calculator V3</title><style>
+body{font-family:Arial,sans-serif;background:#eef2f6;margin:0;color:#17202a}.wrap{max-width:1150px;margin:18px auto;padding:0 12px}.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 12px #0001}h1,h2{margin:0 0 12px}.muted{color:#667085;font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}label{display:block;font-weight:700;font-size:13px;margin-bottom:5px}input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}button{padding:10px 14px;border:0;border-radius:9px;background:#1769aa;color:white;font-weight:700;cursor:pointer}.alt{background:#667085}.danger{background:#b42318}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.result{font-size:18px;font-weight:700;white-space:pre-line}.good{border-right:6px solid #159447}.warn{border-right:6px solid #e09b18}.hide{display:none}table{width:100%;border-collapse:collapse;direction:ltr}th,td{padding:7px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap}th{background:#f8fafc;position:sticky;top:0}.userrow{background:#fff8e6}.scroll{overflow:auto;max-height:520px}.badge{padding:2px 7px;border-radius:12px;background:#eef2f6;font-size:12px}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.wrap{margin:0;padding:8px}.actions button{flex:1}.scroll{max-height:440px}}@media(max-width:480px){.grid{grid-template-columns:1fr}}@media print{body{background:#fff}.no-print,.calc{display:none!important}.card{box-shadow:none}.scroll{max-height:none;overflow:visible}th{position:static}table{font-size:9pt}}
+</style></head><body><div class="wrap">
+<div class="card"><h1>מחשבון כיפוף + מאגר ניסויים V3</h1><div class="muted">מאגר מקורי + נתונים שאתה מוסיף. הנתונים האישיים נשמרים מקומית במכשיר.</div></div>
+<div class="card calc"><h2>מחשבון פריסה</h2><div class="grid"><div><label>חומר</label><select id="mat"></select></div><div><label>עובי T</label><select id="th"></select></div><div><label>רדיוס R</label><select id="rad"></select></div><div><label>זווית</label><select id="ang"></select></div></div><div class="actions"><button onclick="lookup()">מצא נתונים מהמאגר</button></div><div id="answer" class="card warn" style="margin-top:12px"><div id="answerText">בחר נתונים ולחץ חיפוש.</div><div id="matchRows"></div></div><div id="flatBox" class="hide"><div class="grid"><div><label>סכום מידות חיצוניות</label><input id="total" inputmode="decimal"></div><div><label>מספר כיפופים</label><input id="count" type="number" min="1" value="1"></div></div><div class="actions"><button onclick="flatCalc()">חשב פריסה</button></div><div id="flatResult" class="result"></div></div></div>
+<div class="card calc"><h2>Reverse – מציאת BD מחלק קיים</h2><div class="grid"><div><label>חומר</label><select id="revMat"></select></div><div><label>עובי T</label><select id="revT"></select></div><div><label>רדיוס R</label><select id="revR"></select></div><div><label>זווית</label><select id="revA"></select></div><div><label>מספר כיפופים</label><input id="revCount" type="number" min="1" value="1"></div><div><label>פריסה קיימת</label><input id="revFlat" inputmode="decimal"></div><div><label>סכום מידות חיצוניות</label><input id="revOutside" inputmode="decimal"></div></div><div class="actions"><button onclick="reverseLookup()">חשב והשווה למאגר</button></div><div id="reverseResult" class="result" style="margin-top:10px"></div><div id="reverseRows"></div></div>
+<div class="card no-print"><h2>הוסף / ערוך ניסוי</h2><input type="hidden" id="editId"><div class="grid"><div><label>חומר</label><select id="aMat"><option value="Steel">ברזל</option><option value="Stainless">נירוסטה</option><option value="Aluminum">אלומיניום</option><option value="Nichrome">ניכרום</option></select></div><div><label>עובי T</label><input id="aT" inputmode="decimal"></div><div><label>זווית °</label><input id="aA" inputmode="decimal" value="90"></div><div><label>רדיוס R</label><input id="aR" inputmode="decimal"></div><div><label>פריזמה V</label><input id="aV" inputmode="decimal"></div><div><label>BD</label><input id="aBD" inputmode="decimal"></div><div><label>תאריך</label><input id="aDate" type="date"></div><div><label>הערה</label><input id="aNote"></div></div><div class="actions"><button onclick="saveRecord()">שמור במאגר</button><button class="alt" onclick="clearForm()">נקה</button></div><div id="saveMsg" class="muted"></div></div>
+<div class="card"><h2>מאגר הנתונים</h2><div class="actions no-print"><button onclick="printDB()">🖨️ הדפס / PDF</button><button onclick="exportCSV()">📊 Excel / CSV</button><button class="alt" onclick="exportBackup()">💾 גיבוי JSON</button><button class="alt" onclick="document.getElementById('importFile').click()">📥 שחזור</button><input id="importFile" class="hide" type="file" accept="application/json" onchange="importBackup(event)"></div><div class="scroll"><table><thead><tr><th>ID</th><th>Material</th><th>T</th><th>Angle</th><th>V</th><th>R</th><th>BD</th><th>Source</th><th>Date</th><th>Note</th><th class="no-print">Actions</th></tr></thead><tbody id="dbRows"></tbody></table></div><div id="dbCount" class="muted"></div></div>
+</div><script>
+const BASE_DATA = [
+["Steel",1.5,25.0,3.0,5.6,""],
+["Stainless",5.0,25.0,5.0,7.2,""],
+["Steel",2.0,50.0,10.0,15.5,""],
+["Stainless",1.2,35.0,3.0,8.9,""],
+["Aluminum",1.2,35.0,3.0,9.0,""],
+["Steel",3.0,50.0,10.0,8.9,""],
+["Steel",4.0,50.0,10.0,10.0,""],
+["Steel",6.0,50.0,10.0,13.6,""],
+["Stainless",5.0,35.0,3.0,9.8,""],
+["Steel",2.0,25.0,3.0,4.8,""],
+["Steel",8.0,50.0,3.0,14.4,""],
+["Aluminum",3.0,12.0,0.8,4.4,""],
+["Stainless",2.0,16.0,0.8,3.8,""],
+["Steel",3.0,25.0,3.0,5.8,""],
+["Aluminum",5.0,20.0,3.0,8.6,""],
+["Stainless",8.0,45.0,10.0,14.6,""],
+["Stainless",3.0,14.0,3.0,5.1,""],
+["Stainless",3.0,25.0,3.0,5.5,""],
+["Aluminum",5.0,25.0,3.0,8.2,""],
+["Steel",3.0,35.0,3.0,6.0,""],
+["Steel",3.0,35.0,10.0,8.4,""],
+["Steel",2.0,25.0,8.0,5.7,""],
+["Steel",4.0,35.0,3.0,7.7,""],
+["Aluminum",3.0,12.0,3.0,5.2,""],
+["Steel",6.0,60.0,3.0,12.6,""],
+["Steel",8.0,60.0,15.0,18.0,""],
+["Steel",6.0,35.0,10.0,13.0,""],
+["Steel",2.0,35.0,10.0,7.3,""],
+["Steel",6.0,35.0,5.0,11.0,""],
+["Steel",2.0,35.0,15.5,9.4,""],
+["Steel",2.0,50.0,15.5,9.4,""],
+["Steel",4.0,25.0,5.0,8.0,""],
+["Stainless",4.0,60.0,0.8,10.4,""],
+["Aluminum",1.5,12.0,2.0,2.68,""],
+["Stainless",8.0,35.0,3.0,13.3,""],
+["Steel",5.0,25.0,0.8,8.2,""],
+["Steel",5.0,35.0,0.8,8.9,""],
+["Nichrome",0.3,4.0,0.5,0.75,""],
+["Stainless",3.0,12.0,0.8,5.0,""],
+["Stainless",3.0,50.0,16.0,11.0,""],
+["Stainless",1.5,25.0,5.0,4.3,""],
+["Aluminum",2.5,10.0,0.8,4.1,""],
+["Aluminum",2.5,8.0,0.8,4.0,""],
+["Aluminum",2.0,8.0,0.8,3.1,""],
+["Steel",6.0,35.0,8.5,11.9,"ST52"],
+["Steel",6.0,25.0,5.0,10.0,"ST52"],
+["Steel",4.0,20.0,0.8,6.7,""],
+["Stainless",2.0,25.0,3.0,3.8,"flat die"],
+["Steel",4.0,25.0,3.0,7.3,""],
+["Steel",5.0,20.0,0.8,7.8,""],
+["Steel",5.0,20.0,3.0,8.0,""],
+["Steel",4.0,16.0,0.8,6.4,""],
+["Steel",10.0,70.0,20.0,21.9,"flat die"],
+["Steel",6.0,25.0,3.0,9.6,""],
+["Steel",10.0,40.0,5.0,16.3,""],
+["Steel",8.0,35.0,3.0,13.5,""],
+["Stainless",5.0,20.0,0.8,8.2,""],
+["Stainless",4.0,20.0,0.8,6.9,""],
+["Stainless",2.5,14.0,0.8,4.6,""],
+["Steel",3.0,25.0,5.0,6.4,""],
+["Steel",2.0,25.0,5.0,4.9,""],
+["Aluminum",4.0,25.0,3.0,6.7,""],
+["Aluminum",4.0,25.0,0.8,6.6,""],
+["Aluminum",4.0,20.0,0.8,6.4,""],
+["Steel",5.0,35.0,5.0,9.5,""],
+["Aluminum",5.0,25.0,0.8,7.9,""],
+["Steel",3.0,22.0,0.8,5.4,"60 deg tooling"],
+["Aluminum",1.5,16.0,3.0,3.3,""],
+["Aluminum",2.0,16.0,3.0,4.0,""],
+["Nichrome",0.9,8.0,0.5,1.7,""],
+["Aluminum",4.0,16.0,0.5,6.5,"60 deg tooling"],
+["Steel",5.0,25.0,3.0,8.5,""],
+["Aluminum",6.0,25.0,5.0,10.2,""],
+["Aluminum",6.0,25.0,4.0,9.8,""],
+["Stainless",6.0,35.0,3.0,11.2,""],
+["Steel",10.0,50.0,5.0,16.2,""],
+["Aluminum",4.0,25.0,5.0,8.0,""],
+["Steel",2.0,50.0,15.0,9.2,""],
+["Steel",1.2,6.0,0.8,2.0,""],
+["Aluminum",5.0,25.0,5.0,9.0,""],
+["Aluminum",2.0,10.0,0.8,3.2,""],
+["Aluminum",3.0,16.0,3.0,5.6,""],
+["Steel",5.0,20.0,3.0,8.2,""],
+["Stainless",5.0,25.0,5.0,9.2,""],
+["Stainless",4.0,25.0,5.0,7.6,""],
+["Steel",4.0,35.0,10.0,9.8,""],
+["Steel",5.0,35.0,10.0,11.0,""],
+["Stainless",0.8,14.0,5.0,2.9,""],
+["Aluminum",1.0,35.0,10.0,5.8,""],
+["Aluminum",1.5,35.0,10.0,6.7,""],
+["Aluminum",2.0,35.0,10.0,7.0,""],
+["Aluminum",2.5,35.0,10.0,7.6,""],
+["Aluminum",3.0,35.0,10.0,8.0,""],
+["Steel",4.0,35.0,0.8,7.5,""],
+["Steel",3.0,35.0,0.8,6.1,""],
+["Steel",6.0,35.0,0.8,10.4,""],
+["Aluminum",6.0,35.0,3.0,9.8,""],
+["Stainless",1.5,12.0,0.5,3.1,""],
+["Steel",2.0,10.0,0.5,3.0,"60 deg tooling"],
+["Steel",8.0,45.0,3.0,13.6,""],
+["Steel",1.2,8.0,2.5,2.5,""],
+["Steel",1.2,8.0,3.0,2.8,""],
+["Aluminum",6.0,25.0,0.8,9.7,""],
+["Steel",1.0,4.0,0.5,1.6,""],
+["Stainless",1.0,4.0,0.5,1.7,""],
+["Aluminum",10.0,35.0,3.0,14.7,""],
+["Aluminum",10.0,50.0,10.0,17.1,""],
+["Stainless",10.0,45.0,6.0,16.0,""],
+["Stainless",3.0,14.0,2.0,5.1,""],
+["Stainless",3.0,16.0,2.0,5.2,""],
+["Aluminum",2.0,12.0,2.0,3.6,""],
+["Steel",2.0,12.0,2.0,3.53,""],
+["Steel",2.0,12.0,2.0,3.7,""],
+["Aluminum",6.0,25.0,5.0,11.0,"deep bend / special"],
+["Aluminum",6.0,35.0,11.0,13.4,""],
+["Steel",3.0,20.0,5.0,6.2,""],
+["Steel",8.0,35.0,4.0,13.0,""],
+["Aluminum",3.0,25.0,5.0,6.4,""],
+["Aluminum",3.0,50.0,18.0,12.9,""],
+["Aluminum",4.0,18.0,2.0,6.5,""],
+["Aluminum",8.0,50.0,8.0,14.8,""],
+["Stainless",2.5,16.0,3.0,4.7,""],
+["Steel",8.0,55.0,10.0,13.6,"flat die"],
+["Steel",10.0,50.0,3.0,17.0,""],
+["Aluminum",3.0,12.0,0.8,4.6,""],
+["Steel",2.5,8.0,0.8,3.45,""],
+["Steel",3.0,25.0,3.0,6.1,"ST52"],
+["Aluminum",2.0,35.0,8.0,6.0,""],
+["Stainless",4.0,20.0,3.0,7.0,""],
+["Aluminum",0.8,25.0,10.0,5.6,""],
+["Steel",6.0,35.0,8.0,11.8,""],
+["Stainless",10.0,50.0,5.0,15.9,""],
+["Steel",2.0,18.0,5.0,4.7,""],
+["Stainless",2.0,12.0,3.0,3.9,""],
+["Stainless",2.0,14.0,3.0,4.1,""],
+["Stainless",3.0,14.0,3.0,5.3,""],
+["Stainless",3.0,14.0,0.8,4.9,""],
+["Steel",5.0,35.0,3.0,8.8,""],
+["Steel",6.0,35.0,5.0,10.1,""],
+["Aluminum",5.0,35.0,5.0,9.2,""],
+["Aluminum",4.0,25.0,4.0,7.3,"R4 / punch 8 noted"],
+["Aluminum",4.0,20.0,4.0,7.1,""],
+["Aluminum",1.6,12.0,3.0,3.2,""],
+["Aluminum",2.0,12.0,3.0,3.9,""],
+["Steel",6.0,65.0,25.0,19.0,"ST52 / special tool"],
+["Steel",5.0,25.0,5.0,9.1,""],
+["Aluminum",1.5,6.0,0.5,2.3,""],
+["Aluminum",2.5,14.0,3.0,4.3,""],
+["Stainless",3.0,25.0,0.8,6.1,""],
+["Steel",2.5,16.0,0.8,4.3,""],
+["Stainless",3.0,16.0,3.0,5.4,""],
+["Aluminum",3.0,20.0,5.0,6.6,""],
+["Aluminum",6.0,35.0,5.0,10.7,""]
+];
+const KEY="bend_user_records_v3"; const OLDKEY="bend_user_records_v2"; const NAMES={Steel:"ברזל",Stainless:"נירוסטה",Aluminum:"אלומיניום",Nichrome:"ניכרום"}; let selected=null; const $=id=>document.getElementById(id); const num=v=>parseFloat(String(v).replace(",","."));
+function baseRecords(){return BASE_DATA.map((x,i)=>({id:"B"+(i+1),material:x[0],t:x[1],v:x[2],r:x[3],bd:x[4],note:x[5]||"",angle:90,source:"מקורי",date:""}))}
+function users(){try{let s=localStorage.getItem(KEY);if(!s){s=localStorage.getItem(OLDKEY);if(s)localStorage.setItem(KEY,s)}return JSON.parse(s||"[]")}catch(e){return[]}}
+function saveUsers(a){localStorage.setItem(KEY,JSON.stringify(a))} function all(){return baseRecords().concat(users())} function uniq(a){return [...new Set(a)].sort((a,b)=>(typeof a==="number"&&typeof b==="number")?a-b:String(a).localeCompare(String(b)))}
+function opts(id,a,label=x=>x){let e=$(id);e.innerHTML="";a.forEach(v=>{let o=document.createElement("option");o.value=v;o.textContent=label(v);e.appendChild(o)})}
+function filterSet(prefix){let A=all(),m=$(prefix+"Mat").value,t=num($(prefix+"T").value),r=num($(prefix+"R").value);return A.filter(x=>x.material===m&&x.t===t&&x.r===r)}
+function initCalc(){let A=all();opts("mat",uniq(A.map(x=>x.material)),x=>NAMES[x]||x);$("mat").onchange=refreshT;$("th").onchange=refreshR;$("rad").onchange=refreshA;refreshT()}
+function refreshT(){let A=all(),m=$("mat").value;opts("th",uniq(A.filter(x=>x.material===m).map(x=>x.t)),x=>x+" מ״מ");refreshR()}function refreshR(){let A=all(),m=$("mat").value,t=num($("th").value);opts("rad",uniq(A.filter(x=>x.material===m&&x.t===t).map(x=>x.r)),x=>"R"+x);refreshA()}function refreshA(){let A=all(),m=$("mat").value,t=num($("th").value),r=num($("rad").value);opts("ang",uniq(A.filter(x=>x.material===m&&x.t===t&&x.r===r).map(x=>x.angle)),x=>x+"°")}
+function initReverse(){let A=all();opts("revMat",uniq(A.map(x=>x.material)),x=>NAMES[x]||x);$("revMat").onchange=revT;$("revT").onchange=revR;$("revR").onchange=revA;revT()}function revT(){let A=all(),m=$("revMat").value;opts("revT",uniq(A.filter(x=>x.material===m).map(x=>x.t)));revR()}function revR(){let A=all(),m=$("revMat").value,t=num($("revT").value);opts("revR",uniq(A.filter(x=>x.material===m&&x.t===t).map(x=>x.r)),x=>"R"+x);revA()}function revA(){let s=filterSet("rev");opts("revA",uniq(s.map(x=>x.angle)),x=>x+"°")}
+function rowsTable(rows){if(!rows.length)return "";return '<div class="scroll"><table><thead><tr><th>V</th><th>R</th><th>Angle</th><th>BD</th><th>Source</th><th>Note</th></tr></thead><tbody>'+rows.map(x=>`<tr><td>${x.v}</td><td>${x.r}</td><td>${x.angle}°</td><td><b>${x.bd}</b></td><td>${x.source}</td><td>${esc(x.note||"")}</td></tr>`).join("")+'</tbody></table></div>'}
+function lookup(){let m=$("mat").value,t=num($("th").value),r=num($("rad").value),a=num($("ang").value);let rows=all().filter(x=>x.material===m&&x.t===t&&x.r===r&&x.angle===a).sort((x,y)=>x.v-y.v||x.bd-y.bd);if(!rows.length){$("answerText").textContent="לא נמצאה התאמה.";$("matchRows").innerHTML="";$("flatBox").className="hide";selected=null;return}selected=rows[0];$("answerText").textContent=`נמצאו ${rows.length} רשומות. נבחרה הראשונה: V${selected.v} | R${selected.r} | ${selected.angle}° | BD ${selected.bd} מ״מ`;$("matchRows").innerHTML=rowsTable(rows);$("flatBox").className=""}
+function flatCalc(){if(!selected)return;let total=num($("total").value),c=parseInt($("count").value);if(!Number.isFinite(total)||!c){$("flatResult").textContent="נא להזין נתונים תקינים";return}let d=selected.bd*c;$("flatResult").textContent=`סה״כ הפחתה: ${d.toFixed(3)} מ״מ\nפריסה: ${(total-d).toFixed(3)} מ״מ`}
+function reverseLookup(){let c=parseInt($("revCount").value),flat=num($("revFlat").value),out=num($("revOutside").value);if(!c||!Number.isFinite(flat)||!Number.isFinite(out)){$("reverseResult").textContent="נא להזין מספר כיפופים, פריסה וסכום מידות.";return}let bd=(out-flat)/c,m=$("revMat").value,t=num($("revT").value),r=num($("revR").value),a=num($("revA").value);let rows=all().filter(x=>x.material===m&&x.t===t&&x.r===r&&x.angle===a).sort((x,y)=>Math.abs(x.bd-bd)-Math.abs(y.bd-bd));let best=rows[0];$("reverseResult").textContent=`BD נמדד: ${bd.toFixed(3)} מ״מ`+(best?`\nהכי קרוב במאגר: V${best.v} | BD ${best.bd} | הפרש ${Math.abs(best.bd-bd).toFixed(3)} מ״מ`:"\nאין התאמות במאגר");$("reverseRows").innerHTML=rowsTable(rows)}
+function saveRecord(){let rec={id:$("editId").value||("U"+Date.now()),material:$("aMat").value,t:num($("aT").value),angle:num($("aA").value),r:num($("aR").value),v:num($("aV").value),bd:num($("aBD").value),note:$("aNote").value.trim(),date:$("aDate").value,source:"ניסוי"};if([rec.t,rec.angle,rec.r,rec.v,rec.bd].some(x=>!Number.isFinite(x))){$("saveMsg").textContent="יש למלא T, זווית, R, V ו-BD במספרים תקינים.";return}let u=users(),i=u.findIndex(x=>x.id===rec.id);if(i>=0)u[i]=rec;else u.push(rec);saveUsers(u);$("saveMsg").textContent="הנתון נשמר.";clearForm(false);initAll()}
+function clearForm(msg=true){$("editId").value="";["aT","aR","aV","aBD","aNote"].forEach(id=>$(id).value="");$("aA").value="90";$("aDate").value=new Date().toISOString().slice(0,10);if(msg)$("saveMsg").textContent=""}
+function editRec(id){let x=users().find(r=>r.id===id);if(!x)return;$("editId").value=x.id;$("aMat").value=x.material;$("aT").value=x.t;$("aA").value=x.angle;$("aR").value=x.r;$("aV").value=x.v;$("aBD").value=x.bd;$("aNote").value=x.note||"";$("aDate").value=x.date||"";window.scrollTo({top:document.body.scrollHeight/2,behavior:"smooth"})}
+function delRec(id){if(confirm("למחוק את הרשומה?")){saveUsers(users().filter(x=>x.id!==id));initAll()}}
+function esc(s){return String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]))}
+function renderDB(){let A=all(),tb=$("dbRows");tb.innerHTML=A.map(x=>`<tr class="${x.source==="ניסוי"?"userrow":""}"><td>${x.id}</td><td>${NAMES[x.material]||x.material}</td><td>${x.t}</td><td>${x.angle}°</td><td>${x.v}</td><td>${x.r}</td><td><b>${x.bd}</b></td><td>${x.source}</td><td>${x.date||""}</td><td>${esc(x.note||"")}</td><td class="no-print">${x.source==="ניסוי"?`<button onclick="editRec('${x.id}')">ערוך</button> <button class="danger" onclick="delRec('${x.id}')">מחק</button>`:"—"}</td></tr>`).join("");$("dbCount").textContent=`סה״כ ${A.length} רשומות | ניסויים שלך: ${users().length}`}
+function printDB(){window.print()}
+function csvText(){let R=[["ID","Material","Thickness_mm","Angle_deg","V_mm","R_mm","BD_mm","Source","Date","Note"]];all().forEach(x=>R.push([x.id,NAMES[x.material]||x.material,x.t,x.angle,x.v,x.r,x.bd,x.source,x.date||"",x.note||""]));return R.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n")}
+function download(name,type,text){let b=new Blob([text],{type}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportCSV(){download("bend_database.csv","text/csv;charset=utf-8","\ufeff"+csvText())} function exportBackup(){download("bend_database_backup.json","application/json;charset=utf-8",JSON.stringify(users(),null,2))}
+
+function chooseBackupFile(){
+  if (window.Android && typeof Android.openJsonFile === "function") {
+    Android.openJsonFile();
+  } else {
+    document.getElementById("importFile").click();
+  }
+}
+
+function importBackupText(text){
+  try{
+    const a = JSON.parse(text);
+    if(!Array.isArray(a)) throw Error();
+    if(confirm(`לשחזר ${a.length} רשומות?`)){
+      saveUsers(a);
+      initAll();
+      alert("השחזור הושלם.");
+    }
+  }catch(e){
+    alert("קובץ גיבוי לא תקין");
+  }
+}
+
+function importBackup(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let a=JSON.parse(r.result);if(!Array.isArray(a))throw Error();if(confirm(`לשחזר ${a.length} רשומות?`)){saveUsers(a);initAll()}}catch(_){alert("קובץ גיבוי לא תקין")}};r.readAsText(f);e.target.value=""}
+function initAll(){initCalc();initReverse();renderDB();if(!$("aDate").value)$("aDate").value=new Date().toISOString().slice(0,10)} document.addEventListener("DOMContentLoaded",initAll);
+</script></body></html>
