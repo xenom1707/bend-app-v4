@@ -2,7 +2,7 @@ name: Build Android V4 APK
 
 on:
   workflow_dispatch:
-  push:
+  push: 
     branches:
       - main
       - master
